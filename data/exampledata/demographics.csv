@@ -1,0 +1,10 @@
+District,Prefecture,Total_Population,Pop_Age_0_14_Pct,Pop_Age_15_64_Pct,Pop_Age_65_Plus_Pct,Foreign_Residents_Pct,Industry_Primary_Pct,Industry_Secondary_Pct,Industry_Tertiary_Pct,Avg_Income_Million_Yen,LDP_Stronghold_Score
+Tokyo 1st,Tokyo,450000,10.5,68.5,21.0,3.5,0.1,12.4,87.5,6.5,0.4
+Tokyo 2nd,Tokyo,420000,11.0,70.0,19.0,4.2,0.1,11.0,88.9,7.2,0.3
+Tokyo 3rd,Tokyo,470000,10.8,67.2,22.0,2.8,0.2,13.5,86.3,5.8,0.5
+Tokyo 4th,Tokyo,440000,10.2,66.8,23.0,2.5,0.1,14.0,85.9,5.5,0.6
+Tokyo 5th,Tokyo,460000,10.4,68.0,21.6,2.9,0.1,12.8,87.1,6.0,0.4
+Hokkaido 1st,Hokkaido,380000,10.2,60.5,29.3,0.8,2.5,18.0,79.5,4.2,0.6
+Aomori 1st,Aomori,300000,9.5,55.0,35.5,0.5,8.5,20.5,71.0,3.5,0.8
+Osaka 1st,Osaka,400000,10.8,65.0,24.2,3.2,0.1,15.2,84.7,5.0,0.2
+Fukuoka 1st,Fukuoka,390000,11.5,64.0,24.5,2.1,0.5,16.0,83.5,4.8,0.5
