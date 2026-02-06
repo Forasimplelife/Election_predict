@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Results & Outputs
+results/
+*.png
+*.pdf
+*.svg
+*.jpg
+*.jpeg
+*.gif
+*.csv
+*.xlsx
+*.xls
+*.tsv
+*.tmp
+*.log
+
+# Data (keep only minimal sample for demo)
+data/election_results/pr_data2017.csv
+!data/election_results/pr_data2021.csv
+!data/election_results/pr_data2024.csv
+!data/training_dataset.csv
+# Exclude all other raw/large data
+/data/election_results/*
+!/data/election_results/pr_data2021.csv
+!/data/election_results/pr_data2024.csv
+!/data/election_results/pr_data2017.csv
+!/data/training_dataset.csv
+/data/demographics_real.csv
+/data/exampledata/
+/data/senkyoku2022_toukei/
+/data/smd_data2017.csv
+/data/smd_data2021.csv
+/data/smd_data2024.csv
+/data/backup/
+/data/eStats-master/
+
+# Backup & temp
+backup/
+*.bak
+*.old
+
+# Misc
+*.env
+*.secret
+*.token
+
+# README variants
+README_OLD.md
+README_NEW.md

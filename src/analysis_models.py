@@ -64,18 +64,23 @@ class ElectionSimulator:
     def __init__(self, num_simulations=10000):
         self.n = num_simulations
 
-    def run(self, district_dataset, komeito_scenario='neutral'):
+    def run(self, district_dataset, coalition_retention_rate=0.7, scenario_name='Baseline'):
         """
-        Run simulations.
-        运行模拟。
+        Run simulations with coalition retention rate.
+        运行模拟，使用新党选民保留率参数。
 
         params:
-            komeito_scenario: 
-                'neutral' (Abstain: Komeito voters stay home / 公明党弃权), 
-                'hostile' (Switch: Komeito voters vote for opposition / 公明党倒戈)
+            coalition_retention_rate: float (0.0-1.0)
+                The proportion of Komeito+CDP voters who stay with the new coalition party.
+                新党(公明+立宪)选民的保留率。
+                - 1.0 = Perfect merger (完美合并)
+                - 0.7 = Realistic scenario (现实场景，30%流失/弃权)
+                - 0.5 = Failed coalition (合并失败，类似2021立共共斗)
+            scenario_name: str
+                Name of the scenario for display purposes.
         """
         print(
-            f"[Simulation] Running {self.n} simulations with scenario: {komeito_scenario}...")
+            f"[Simulation] Running {self.n} simulations - Scenario: {scenario_name} (Retention: {coalition_retention_rate*100:.0f}%)...")
 
         if district_dataset.empty:
             print("[Error] Empty district dataset.")
@@ -98,36 +103,50 @@ class ElectionSimulator:
             # 1. 全国波动 (随机波动)
             national_swing = np.random.normal(0, 0.02)
 
-            # 2. Base Vote Calculation
-            # 2. 基础得票率计算
-            current_votes = ldp_base + national_swing - policy_backlash
+            # 2. Base Vote Calculation (2026 Context: Post-Senate Victory)
+            # 2. 基础得票率计算 (2026背景：参院选胜利后的现状维持效应)
 
-            # 3. Komeito Impact Logic
-            # 3. 公明党影响逻辑
-            if komeito_scenario == 'neutral':
-                # Komeito voters abstain. LDP loses ~80% of Komeito vote (assuming previous support).
-                # 公明党支持者弃权。自民党失去约 80% 的公明党选票。
+            # Add 2025 Senate momentum bonus (假设自民党在2025参院选中稳住基本盘)
+            senate_momentum = np.random.normal(0.03, 0.01)  # +3% 基础支持率
 
-                # Threshold effectively 40% (Fragmented Opposition)
-                # 胜选门槛实际上降至 40% (因为在野党分裂)
-                current_votes_adj = current_votes - (komeito_votes * 0.8)
-                win_threshold = 0.40
+            current_votes = ldp_base + national_swing + senate_momentum - policy_backlash
 
-            elif komeito_scenario == 'hostile':
-                # Komeito voters switch to Opposition.
-                # 公明党支持者倒戈转向在野党。
+            # 3. Coalition Impact Logic (New Party = Komeito + CDP)
+            # 3. 新党影响逻辑 (新党 = 公明党 + 立宪民主党)
 
-                # LDP loses votes AND thresholds rise.
-                # 自民党失去选票，且胜选门槛升高。
-                current_votes_adj = current_votes - (komeito_votes * 0.8)
+            # Calculate the leakage (流失率)
+            leakage_rate = 1.0 - coalition_retention_rate
 
-                # Higher threshold due to unified opposition
-                # 由于在野党联合 (公明党+立宪)，胜选门槛接近 48%
-                win_threshold = 0.48
+            # Leaked votes split between:
+            # - Abstention (弃权): 50%
+            # - Return to LDP (回流保守派): 40% (提高回流比例，因为公明党保守派对左翼立宪非常抵触)
+            # - Other parties (其他小党): 10%
+            ldp_gain_from_leakage = komeito_votes * leakage_rate * 0.40
 
+            # LDP adjusts: loses Komeito organizational support, but gains conservative defectors
+            # 自民党调整：失去公明党组织票，但获得保守派回流
+            # Note: Only loses 60% of Komeito support (not 80%), because organizational decline is gradual
+            current_votes_adj = current_votes - \
+                (komeito_votes * 0.6) + ldp_gain_from_leakage
+
+            # Win threshold depends on opposition unity + Communist Party factor
+            # 胜选门槛取决于在野党团结度 + 共产党搅局因素
+            # 关键假设：即使新党成立，共产党仍会在大部分选区派候选人（历史惯性）
+            communist_spoiler_effect = np.random.uniform(
+                0.03, 0.08)  # 共产党分流3-8%反自民票
+
+            if coalition_retention_rate >= 0.8:
+                # Strong opposition unity -> higher threshold, but Communist Party still spoils
+                # 在野党高度团结 -> 门槛升高，但共产党仍搅局
+                win_threshold = 0.42 + communist_spoiler_effect * 0.5
+            elif coalition_retention_rate >= 0.6:
+                # Moderate unity + significant Communist spoiler
+                # 中等团结度 + 共产党显著搅局
+                win_threshold = 0.38 + communist_spoiler_effect
             else:
-                current_votes_adj = current_votes
-                win_threshold = 0.42
+                # Weak unity, heavily fragmented opposition (like 2021 CDP-JCP failure)
+                # 团结度低，在野党严重分裂（类似2021立共失败）
+                win_threshold = 0.35 + communist_spoiler_effect * 1.2
 
             # 4. Determine Wins
             # 4. 判定胜负
@@ -136,7 +155,7 @@ class ElectionSimulator:
 
         return pd.Series(ldp_seats_distribution)
 
-    def estimate_pr_seats(self, national_support_rate):
+    def estimate_pr_seats(self, national_support_rate, scenario_context='baseline'):
         """
         Estimate Proportional Representation (PR) seats.
         估算比例代表议席 (总共 176 席)。
@@ -144,20 +163,27 @@ class ElectionSimulator:
         History / 历史数据:
         - 2021: LDP Vote 34.7% -> 72 Seats (Efficiency ~2.07)
         - 2024: LDP Vote 26.7% -> 59 Seats (Efficiency ~2.2)
+        - 2026: Expected recovery to ~32-35% range after scandal fatigue
 
         Logic: 
-        PR seats roughly align with Party Support Rate, but LDP gets a slight bonus due to D'Hondt method fragmentation.
+        PR seats roughly align with Party Support Rate, with D'Hondt method providing bonus to largest party.
+        比例代表席位与政党支持率大致一致，D'Hondt法给最大政党额外奖励。
         """
         total_pr_seats = 176
 
-        # Assume PR support is slightly lower than Candidate Support (SMD)
-        # 通常选民会在小选区投自民党候选人(因为由于人情/地缘)，但在比例区可能投给维新或国民作为制衡
-        estimated_pr_vote_share = national_support_rate * 0.85
+        # 2026 Context: Scandal recovery + Takaichi novelty effect
+        # Assume PR support recovers to 33-36% range (up from 2024's 26.7%)
+        estimated_pr_vote_share = national_support_rate * 0.90  # Slightly lower than SMD
 
-        # Simple Linear Projection with a slight bonus
-        projected_seats = int(total_pr_seats * estimated_pr_vote_share * 1.1)
+        # 关键修正：考虑2025参院选后的现状维持效应
+        # If LDP wins 2025 Senate -> confidence boost in PR voting
+        estimated_pr_vote_share = min(
+            estimated_pr_vote_share + 0.04, 0.38)  # Cap at 38%
 
-        # Cap at reasonable max/min
-        projected_seats = max(30, min(projected_seats, 100))
+        # D'Hondt bonus for largest party (typically 1.15x multiplier)
+        projected_seats = int(total_pr_seats * estimated_pr_vote_share * 1.18)
+
+        # Realistic range based on historical data
+        projected_seats = max(65, min(projected_seats, 90))
 
         return projected_seats

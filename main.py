@@ -31,13 +31,28 @@ def main():
     print("\n--- Phase 2: Model Training ---")
     trained_model = processor.train_baseline_model(train_df)
 
-    # 4. Feature Engineering for Simulation
-    # Calculate 'ldp_base' (predicted support) and 'policy_backlash' for each district
-    print("\n--- Phase 3: District Feature Engineering ---")
-    # For simulation, we currently act as if we are predicting on the same districts we trained on (Self-prediction for baseline)
-    # In a real future scenario, we would load NEW demographics for 2026.
-    # Here uses 2022 Census data which is still valid for 2026.
+    # 4. Feature Engineering for Simulation (2026 Context)
+    print("\n--- Phase 3: District Feature Engineering (2026 Context) ---")
+
+    # Key Adjustment: 2024 was LDP's "scandal low point". By 2026:
+    # 关键调整：2024是自民党"丑闻低谷"。到2026年：
+    # 1. Scandal fatigue (丑闻疲劳) - voters have short memory
+    # 2. Takaichi effect (高市效应) - new PM brings novelty
+    # 3. Economic recovery (if any) - 经济复苏（如果有的话）
+
+    # Apply "scandal recovery" factor: +5% baseline boost
+    # 应用"丑闻淡化"因子：基础支持率回升5%
+    train_df['LDP_Share_2026_adjusted'] = train_df['LDP_Share'] * \
+        1.08  # 8% recovery from 2024 low
+
+    # Temporarily rename for preprocessing compatibility
+    train_df['LDP_Share_original'] = train_df['LDP_Share']
+    train_df['LDP_Share'] = train_df['LDP_Share_2026_adjusted']
+
     district_features = processor.engineer_district_features(train_df, None)
+
+    # Restore original
+    train_df['LDP_Share'] = train_df['LDP_Share_original']
 
     # Add Komeito dependency proxy if not present
     # Assume Komeito splits 10-15% of the conservative vote block, or specifically has ~20-25k solid votes.
@@ -46,22 +61,36 @@ def main():
         # Estimated ~12% reliance
         district_features['komeito_votes_pct'] = 0.12
 
-    # 5. Simulation
+    # 5. Three-Scenario Simulation (Coalition Retention Analysis)
+    # 5. 三场景模拟（新党保留率分析）
     total_districts = len(district_features)
     print(f"\n[Info] Ready to simulate for {total_districts} districts.")
 
-    # Scenario A: Komeito Neutral (Voters stay home)
-    print("\n--- Running Scenario A: Komeito voters abstain ---")
-    sim_results_A = simulator.run(
-        district_features, komeito_scenario='neutral')
+    scenarios = {
+        'Optimistic': {'retention': 0.90, 'description': 'Strong unity, voters accept merger'},
+        'Baseline': {'retention': 0.70, 'description': 'Moderate leakage, realistic scenario'},
+        'Pessimistic': {'retention': 0.50, 'description': 'Failed coalition, 2021 CDP-JCP repeat'}
+    }
 
-    # Scenario B: Komeito Hostile (Voters switch to Opposition)
-    print("\n--- Running Scenario B: Komeito voters switch to Opposition ---")
-    sim_results_B = simulator.run(
-        district_features, komeito_scenario='hostile')
+    results = {}
 
-    # 6. Results
-    print("\n=== Prediction Summary (2026 Hypothetical) ===")
+    for scenario_name, config in scenarios.items():
+        print(
+            f"\n--- Running Scenario: {scenario_name} (Retention: {config['retention']*100:.0f}%) ---")
+        print(f"    Description: {config['description']}")
+        sim_results = simulator.run(
+            district_features,
+            coalition_retention_rate=config['retention'],
+            scenario_name=scenario_name
+        )
+        results[scenario_name] = sim_results
+
+    # 6. Results Compilation
+    # 6. 结果汇总
+    print("\n" + "="*60)
+    print("=== 2026 Election Prediction: Coalition Analysis ===")
+    print("=== 2026年选举预测：新党整合分析 ===")
+    print("="*60)
 
     # Calculate PR Seats (Proportional Representation)
     average_smd_support = district_features['ldp_base'].mean()
@@ -70,36 +99,42 @@ def main():
     # Official House Majority (233 / 465)
     total_house_seats = 465
     official_majority = 233
-
-    print(f"Total Districts Analyzed (SMD Data): {total_districts} / 289")
-    print(
-        f"Calculated PR Seats (LDP): {estimated_pr_seats} / 176 (Based on {average_smd_support:.1%} vote share)")
-    print(f"Official Majority Line: {official_majority} / {total_house_seats}")
-    print("-" * 30)
-
-    mean_smd_A = sim_results_A.mean()
-    mean_smd_B = sim_results_B.mean()
-
-    # Extrapolate missing 18 districts (Assuming purely proportional)
-    # 我们只分析了 271 个区，还有 18 个区没匹配上，按比例补齐
     coverage_ratio = total_districts / 289
 
-    # Total = (SMD_Wins / 0.94) + PR_Seats
-    total_seats_A = (mean_smd_A / coverage_ratio) + estimated_pr_seats
-    total_seats_B = (mean_smd_B / coverage_ratio) + estimated_pr_seats
+    print(f"\nBase Information:")
+    print(f"  Districts Analyzed: {total_districts} / 289")
+    print(f"  LDP PR Seats (Estimated): {estimated_pr_seats} / 176")
+    print(f"  Majority Line: {official_majority} / {total_house_seats}")
+    print("\n" + "-"*60)
 
-    print(
-        f"[Scenario A: Neutral] Total Estimated Seats: {int(total_seats_A)} (SMD: {int(mean_smd_A/coverage_ratio)} + PR: {estimated_pr_seats})")
-    print(
-        f"[Scenario B: Hostile] Total Estimated Seats: {int(total_seats_B)} (SMD: {int(mean_smd_B/coverage_ratio)} + PR: {estimated_pr_seats})")
-    print("-" * 30)
+    # Display results for each scenario
+    print("\nScenario Results:")
+    print(f"{'Scenario':<15} {'SMD Seats':<12} {'Total Seats':<12} {'Majority?':<10}")
+    print("-"*60)
 
-    if total_seats_B < official_majority:
-        print(f">> [ALERT] REGIME CHANGE LIKELY (政权更替可能性大).")
-        print(
-            f"   LDP seats ({int(total_seats_B)}) < Majority ({official_majority}).")
+    for scenario_name in ['Optimistic', 'Baseline', 'Pessimistic']:
+        mean_smd = results[scenario_name].mean()
+        total_seats = (mean_smd / coverage_ratio) + estimated_pr_seats
+        majority_status = "✓ YES" if total_seats >= official_majority else "✗ NO"
+
+        print(f"{scenario_name:<15} {int(mean_smd/coverage_ratio):<12} {int(total_seats):<12} {majority_status:<10}")
+
+    print("-"*60)
+
+    # Key Insight
+    baseline_seats = (results['Baseline'].mean() /
+                      coverage_ratio) + estimated_pr_seats
+    print("\n" + "="*60)
+    print("KEY INSIGHT / 关键结论:")
+    print("="*60)
+    if baseline_seats >= official_majority:
+        print(">> LDP likely retains majority even with coalition breakdown.")
+        print(">> 即使联盟解体，自民党仍可能保持多数。")
+        print(f">> Main reason: Opposition integration failure (野党整合失败).")
     else:
-        print(f">> [RESULT] LDP retains power (自民党保住政权).")
+        print(">> Coalition breakdown threatens LDP majority.")
+        print(">> 联盟解体威胁自民党多数地位。")
+    print("="*60)
 
 
 if __name__ == "__main__":
